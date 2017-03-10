@@ -1,12 +1,25 @@
 #include "Board.h"
 #include "Snake.h"
-#include "Goal.h"
 #include <assert.h>
 
 Board::Board( Graphics& gfx )
 	:
 	gfx( gfx )
 {}
+
+void Board::Initboard(std::mt19937& rng, const class Snake& snake, int nFood, float percentagePoison)
+{
+	assert(nFood >= 0);
+	for (int i = 0; i < nFood; i++)
+	{
+		SpawnBlock(rng, snake, State::food);
+	}
+	assert(percentagePoison >= 0);
+	for (int i = 0; i < int(width * height * percentagePoison); i++)
+	{
+		SpawnBlock(rng, snake, State::poison);
+	}
+}
 
 void Board::DrawCell( const Location & loc,Color c )
 {
@@ -37,12 +50,22 @@ bool Board::IsInsideBoard( const Location & loc ) const
 		loc.y >= 0 && loc.y < height;
 }
 
-bool Board::CheckForObstacle( const Location & loc ) const
+Board::State Board::GetLocState( const Location & loc ) const
 {
-	return hasObstacle[loc.y * width + loc.x];
+	return LocStates[loc.y * width + loc.x];
 }
 
-void Board::SpawnObstacle( std::mt19937 & rng,const Snake & snake,const Goal& goal )
+void Board::ClearLoc(const Location & loc)
+{
+	LocStates[loc.y * width + loc.x] = State::empty;
+}
+
+void Board::SetLocState(const Location& loc,const State& state)
+{
+	LocStates[loc.y * width + loc.x] = state;
+}
+
+void Board::SpawnBlock( std::mt19937 & rng,const Snake& snake, const State& state)
 {
 	std::uniform_int_distribution<int> xDist( 0,GetGridWidth() - 1 );
 	std::uniform_int_distribution<int> yDist( 0,GetGridHeight() - 1 );
@@ -53,9 +76,9 @@ void Board::SpawnObstacle( std::mt19937 & rng,const Snake & snake,const Goal& go
 		newLoc.x = xDist( rng );
 		newLoc.y = yDist( rng );
 	}
-	while( snake.IsInTile( newLoc ) || CheckForObstacle( newLoc ) || goal.GetLocation() == newLoc );
+	while( snake.IsInTile( newLoc ) || GetLocState(newLoc) == State::obstacle || GetLocState(newLoc) == State::food || GetLocState(newLoc) == State::poison );
 
-	hasObstacle[newLoc.y * width + newLoc.x] = true;
+	SetLocState(newLoc, state);
 }
 
 void Board::DrawBorder()
@@ -75,15 +98,25 @@ void Board::DrawBorder()
 	gfx.DrawRect( left,bottom - borderWidth,right,bottom,borderColor );
 }
 
-void Board::DrawObstacles()
+void Board::DrawBoard()
 {
 	for( int y = 0; y < height; y++ )
 	{
 		for( int x = 0; x < width; x++ )
 		{
-			if( CheckForObstacle( { x,y } ) )
+			switch (GetLocState({ x,y }))
 			{
-				DrawCell( { x,y },obstacleColor );
+			case State::empty:
+				break;
+			case State::obstacle:
+				DrawCell({ x,y }, obstacleColor);
+				break;
+			case State::food:
+				DrawCell({ x,y }, foodColor);
+				break;
+			case State::poison:
+				DrawCell({ x,y }, poisonColor);
+				break;
 			}
 		}
 	}

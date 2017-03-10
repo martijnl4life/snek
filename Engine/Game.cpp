@@ -28,10 +28,10 @@ Game::Game( MainWindow& wnd )
 	gfx( wnd ),
 	brd( gfx ),
 	rng( std::random_device()() ),
-	snek( {2,2} ),
-	goal( rng,brd,snek )
+	snek( {2,2} )
 {
 	sndTitle.Play( 1.0f,1.0f );
+	brd.Initboard(rng, snek, 3, 0.2f);
 }
 
 void Game::Go()
@@ -67,14 +67,14 @@ void Game::UpdateModel()
 				delta_loc = { 1,0 };
 			}
 
-			snekMoveCounter += dt;
+			snekMoveCounter += dt + poisonLevel;
 			if( snekMoveCounter >= snekMovePeriod )
 			{
 				snekMoveCounter -= snekMovePeriod;
 				const Location next = snek.GetNextHeadLocation( delta_loc );
 				if( !brd.IsInsideBoard( next ) ||
 					snek.IsInTileExceptEnd( next ) ||
-					brd.CheckForObstacle( next ) )
+					brd.GetLocState(next) == Board::State::obstacle )
 				{
 					gameIsOver = true;
 					sndFart.Play();
@@ -82,16 +82,24 @@ void Game::UpdateModel()
 				}
 				else
 				{
-					if( next == goal.GetLocation() )
+					switch (brd.GetLocState(next))
 					{
-						snek.GrowAndMoveBy( delta_loc );
-						goal.Respawn( rng,brd,snek );
-						brd.SpawnObstacle( rng,snek,goal );
-						sfxEat.Play( rng,0.8f );
-					}
-					else
-					{
-						snek.MoveBy( delta_loc );
+						case Board::State::food:
+							snek.GrowAndMoveBy( delta_loc );
+							brd.SpawnBlock(rng, snek, Board::State::food);
+							brd.SpawnBlock(rng, snek, Board::State::obstacle);
+							sfxEat.Play( rng,0.8f );
+							brd.ClearLoc(next);
+							break;
+						case Board::State::empty:
+							snek.MoveBy(delta_loc);
+							break;
+						case Board::State::poison:
+							snek.MoveBy(delta_loc);
+							brd.ClearLoc(next);
+							brd.SpawnBlock(rng, snek, Board::State::poison);
+							poisonLevel += 0.0006;
+							break;
 					}
 					sfxSlither.Play( rng,0.08f );
 				}
@@ -114,13 +122,12 @@ void Game::ComposeFrame()
 	if( gameIsStarted )
 	{
 		snek.Draw( brd );
-		goal.Draw( brd );
+		brd.DrawBoard();
 		if( gameIsOver )
 		{
 			SpriteCodex::DrawGameOver( 350,265,gfx );
 		}
 		brd.DrawBorder();
-		brd.DrawObstacles();
 	}
 	else
 	{
